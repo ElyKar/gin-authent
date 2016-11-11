@@ -5,6 +5,7 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"errors"
+	"reflect"
 )
 
 // ComputeHash computes the hash of a salted password provided
@@ -31,30 +32,31 @@ func generateSalt() (string, error) {
 }
 
 // SetUserPassword updates a user's information given a new password
+// user should be a pointer to the user model
 // It updates the salt and hash to be stored in the database
 // It updates ONLY those two fields and leave the others untouched
 // Note that it does not persist anything into the database
-func SetUserPassword(user *User, newPassword string) error {
+func SetUserPassword(user interface{}, newPassword string) error {
+	val := reflect.ValueOf(user).Elem()
 	salt, err := generateSalt()
 	if err != nil {
 		return err
 	}
 
-	newHash := computeHash(newPassword, salt)
-	user.Hash = newHash
-	user.Salt = salt
+	hash := computeHash(newPassword, salt)
+	val.FieldByName("Hash").SetString(hash)
+	val.FieldByName("Salt").SetString(salt)
 	return nil
 }
 
 // CheckUser returns true if the user has submitted the correct
 // password, or a generic error otherwise.
-func checkUser(user *User, password string) (bool, error) {
-	if user != nil {
-		salt := user.Salt
-		hash := computeHash(password, salt)
-		if hash == user.Hash {
-			return true, nil
-		}
+func checkUser(user reflect.Value, password string) (bool, error) {
+	salt := user.FieldByName("Salt").String()
+	hash := computeHash(password, salt)
+	if hash == user.FieldByName("Hash").String() {
+		return true, nil
 	}
+
 	return false, errors.New("Invalid attempt for username/password")
 }

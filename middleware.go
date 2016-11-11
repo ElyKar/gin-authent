@@ -26,6 +26,7 @@ func NewAuth(authenticater Authenticater) *Auth {
 }
 
 // Middleware is the handler to add to the gin handler chain. It will be called before each of the actual handlers for the routes. Basically, it retrieves the cookie CookieName from the request, and assert the user is properly authenticated. If not, then the response code will be set to 401. Gin offers the possibility to check such things. If the user is properly authenticated, then it is added to gin's context under the key ContextKey.
+// However, be careful: the user is returned as stored in the session. That is, if the authenticater returns a pointer, then this pointer will be returned.
 func (auth *Auth) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie(CookieName)

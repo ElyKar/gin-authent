@@ -1,6 +1,10 @@
 package db
 
-import "github.com/jinzhu/gorm"
+import (
+	"reflect"
+
+	"github.com/jinzhu/gorm"
+)
 
 // User is the base struct representing a user in the database.
 type User struct {
@@ -9,29 +13,41 @@ type User struct {
 	Salt       string `gorm:"not null"`                       // Salt of the password, in base64
 	Hash       string `gorm:"not null"`                       // Hash of the salt + password, in base64
 	Mail       string `gorm:"type:varchar(100);unique_index"` // Mail address of the user
-	Rights     uint   // The rights this user has
 }
 
 type DbAuthenticater struct {
-	Db *gorm.DB // The database connection
+	db *gorm.DB // The database connection
 
 	// LookForMail is set to true if we have to find users based on their
 	// mail, false if we look for their username.
-	LookForMail bool
+	lookForMail bool
+
+	typ reflect.Type // The user type, used as a model for the fetched instances
+
 }
 
-// Authenticate fetches a user from the database, based on its identifier (username OR mail) and password. It returns a couple (*User,nil) if found, or (nil,error) if not.
+// NewDbAuthenticater returns anew authenticater. It takes a connection to the database as input. If lookForMail is set to true, then user will be logged in according to their mail address, else their username will be used. The interface in argument is the model used for the user. It should contain the base user of the package as an anonymous field.
+func NewDbAuthenticater(db *gorm.DB, lookForMail bool, inter interface{}) *DbAuthenticater {
+	typ := reflect.TypeOf(inter)
+	// Check if we have a struct or ptr to struct
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return &DbAuthenticater{db, lookForMail, typ}
+}
+
+// Authenticate fetches a user from the database, based on its identifier (username OR mail) and password. It returns a couple (User,nil) if found, or (nil,error) if not.
 func (auth *DbAuthenticater) Authenticate(login, password string) (interface{}, error) {
-	res := &User{}
-	if auth.LookForMail {
-		auth.Db.Where("mail = ?", login).First(res)
+	res := reflect.New(auth.typ)
+	if auth.lookForMail {
+		auth.db.Where("mail = ?", login).First(res.Interface())
 	} else {
-		auth.Db.Where("username = ?", login).First(res)
+		auth.db.Where("username = ?", login).First(res.Interface())
 	}
 
-	_, err := checkUser(res, password)
+	_, err := checkUser(res.Elem(), password)
 	if err != nil {
 		return nil, err
 	}
-	return res, nil
+	return res.Interface(), nil
 }
